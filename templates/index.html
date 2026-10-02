@@ -1,25 +1,64 @@
 {% extends "base.html" %}{% block body %}
-<div class="row g-4"><div class="col-md-5"><div class="card"><div class="card-body">
-<h5>New UPI Transaction</h5>
-<form method="post">
-  <input class="form-control mb-2" name="upi_id" placeholder="Receiver UPI ID (e.g. ravi@upi)" required>
-  <input class="form-control mb-2" name="amount" type="number" step="0.01" min="1" placeholder="Amount (₹)" required>
-  <label class="small">Hour of day (0-23)</label>
-  <input class="form-control mb-2" name="hour" type="number" min="0" max="23" value="{{ now_hour }}" required>
-  <label class="small">Distance from usual location (km)</label>
-  <input class="form-control mb-2" name="distance_km" type="number" step="0.1" min="0" value="0" required>
-  <label class="small">Transactions in last hour</label>
-  <input class="form-control mb-2" name="txns_last_hour" type="number" min="0" value="0" required>
-  <div class="form-check"><input class="form-check-input" type="checkbox" name="new_beneficiary" id="nb"><label for="nb" class="form-check-label">New beneficiary</label></div>
-  <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="device_changed" id="dc"><label for="dc" class="form-check-label">New / unrecognised device</label></div>
-  <button class="btn btn-primary w-100">Analyse &amp; Pay</button>
-</form></div></div></div>
-<div class="col-md-7">
-{% if result %}
-<div class="alert {{ 'alert-success' if result.decision=='APPROVED' else 'alert-warning' if result.decision.startswith('OTP') else 'alert-danger' }}">
-  <h4>{{ result.decision }}</h4>Fraud risk: <b>{{ result.risk }}%</b> — ₹{{ result.amount }} to {{ result.upi_id }}</div>
-{% endif %}
-<h5>Recent transactions</h5>
-<table class="table table-sm bg-white"><tr><th>Time</th><th>To</th><th>₹</th><th>Risk</th><th>Decision</th></tr>
-{% for r in rows %}<tr><td>{{ r.created }}</td><td>{{ r.upi_id }}</td><td>{{ r.amount }}</td><td>{{ (r.risk*100)|round(1) }}%</td><td>{{ r.decision }}</td></tr>{% endfor %}
-</table></div></div>{% endblock %}
+<div class="row g-4">
+ <div class="col-lg-5"><div class="gcard p-4">
+  <h4 class="fw-bold mb-1">💳 New UPI Payment</h4>
+  <p class="text-muted small">Enter the details and let the AI judge the risk.</p>
+  <div class="d-flex flex-wrap gap-2 mb-3">
+   <span class="small fw-semibold align-self-center">Try an example:</span>
+   <button type="button" class="btn btn-sm btn-success rounded-pill" onclick="ex(500,14,2,0,0,0,0)">✅ Safe</button>
+   <button type="button" class="btn btn-sm btn-warning rounded-pill" onclick="ex(20000,23,80,2,1,0,1)">⚠️ Risky</button>
+   <button type="button" class="btn btn-sm btn-danger rounded-pill" onclick="ex(60000,2,300,4,1,1,1)">🚨 Fraud</button></div>
+  <form method="post" id="f">
+   <label class="form-label">Receiver UPI ID</label>
+   <input class="form-control mb-2" name="upi_id" id="upi_id" placeholder="ravi@upi" required>
+   <label class="form-label">Amount (₹)</label>
+   <input class="form-control mb-2" name="amount" id="amount" type="number" step="0.01" min="1" placeholder="500" required>
+   <div class="row g-2">
+    <div class="col-6"><label class="form-label">Hour of day (0-23)</label>
+     <input class="form-control mb-2" name="hour" id="hour" type="number" min="0" max="23" value="{{ now_hour }}" required></div>
+    <div class="col-6"><label class="form-label">Distance from usual (km)</label>
+     <input class="form-control mb-2" name="distance_km" id="distance_km" type="number" step="0.1" min="0" value="0" required></div></div>
+   <label class="form-label">Transactions in last hour</label>
+   <input class="form-control mb-3" name="txns_last_hour" id="txns_last_hour" type="number" min="0" value="0" required>
+   <div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" name="new_beneficiary" id="new_beneficiary">
+    <label class="form-check-label" for="new_beneficiary">🧑 New beneficiary</label></div>
+   <div class="form-check form-switch mb-4"><input class="form-check-input" type="checkbox" name="device_changed" id="device_changed">
+    <label class="form-check-label" for="device_changed">📱 New / unrecognised device</label></div>
+   <button class="btn btn-grad w-100">🔍 Analyse &amp; Pay</button>
+  </form></div></div>
+
+ <div class="col-lg-7">
+  {% if result %}
+  {% set col = '#10b981' if result.decision=='APPROVED' else '#f59e0b' if result.decision.startswith('OTP') else '#ef4444' %}
+  {% set ic = '✅' if result.decision=='APPROVED' else '📲' if result.decision.startswith('OTP') else '🚫' %}
+  {% set msg = 'Payment looks genuine and has been approved.' if result.decision=='APPROVED' else 'Unusual activity. OTP re-verification required.' if result.decision.startswith('OTP') else 'High fraud risk. Transaction blocked to protect you.' %}
+  <div class="gcard p-4 mb-4" style="border-left:8px solid {{ col }}">
+   <div class="d-flex align-items-center gap-4 flex-wrap">
+    <svg width="130" height="130" viewBox="0 0 130 130">
+     <circle cx="65" cy="65" r="54" fill="none" stroke="#e5e7eb" stroke-width="13"/>
+     <circle cx="65" cy="65" r="54" fill="none" stroke="{{ col }}" stroke-width="13" stroke-linecap="round"
+      stroke-dasharray="339.3" stroke-dashoffset="339.3" transform="rotate(-90 65 65)" id="ring"/>
+     <text x="65" y="63" text-anchor="middle" font-size="24" font-weight="800" fill="{{ col }}">{{ result.risk }}%</text>
+     <text x="65" y="82" text-anchor="middle" font-size="10" fill="#6b7280">FRAUD RISK</text></svg>
+    <div class="flex-grow-1">
+     <h2 class="fw-bold mb-1" style="color:{{ col }}">{{ ic }} {{ result.decision }}</h2>
+     <p class="mb-1">{{ msg }}</p>
+     <small class="text-muted">₹{{ result.amount }} → {{ result.upi_id }}</small></div></div></div>
+  <script>setTimeout(()=>{var r=document.getElementById('ring');r.style.transition='stroke-dashoffset 1.2s ease';
+   r.style.strokeDashoffset=339.3*(1-{{ result.risk }}/100)},100)</script>
+  {% endif %}
+  <div class="gcard p-4">
+   <h5 class="fw-bold mb-3">🕒 Recent transactions</h5>
+   {% if rows %}<div class="table-responsive"><table class="table table-hover align-middle mb-0">
+    <thead><tr class="small text-muted"><th>Time</th><th>To</th><th>Amount</th><th>Risk</th><th>Decision</th></tr></thead>
+    {% for r in rows %}<tr><td class="small">{{ r.created }}</td><td>{{ r.upi_id }}</td><td>₹{{ r.amount }}</td>
+     <td><div class="progress" style="height:8px;width:70px"><div class="progress-bar" style="width:{{ (r.risk*100)|round(0) }}%;background:{{ '#10b981' if r.decision=='APPROVED' else '#f59e0b' if r.decision.startswith('OTP') else '#ef4444' }}"></div></div>
+      <small>{{ (r.risk*100)|round(1) }}%</small></td>
+     <td><span class="badge-s {{ 's-ok' if r.decision=='APPROVED' else 's-otp' if r.decision.startswith('OTP') else 's-block' }}">{{ r.decision }}</span></td></tr>{% endfor %}
+   </table></div>
+   {% else %}<div class="text-center text-muted py-4"><div style="font-size:2.5rem">🧾</div>No transactions yet. Try an example on the left!</div>{% endif %}
+  </div></div></div>
+<script>
+function ex(a,h,d,t,nb,dc,u){amount.value=a;hour.value=h;distance_km.value=d;txns_last_hour.value=t;
+ new_beneficiary.checked=!!nb;device_changed.checked=!!dc;upi_id.value=upi_id.value||(u?'new@upi':'ravi@upi');}
+</script>{% endblock %}
