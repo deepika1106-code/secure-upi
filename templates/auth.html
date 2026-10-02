@@ -1,10 +1,25 @@
 {% extends "base.html" %}{% block body %}
-<div class="card mx-auto" style="max-width:380px"><div class="card-body">
-<h4>{{ mode }}</h4>
-<form method="post">
-  <input class="form-control mb-2" name="username" placeholder="Username" required>
-  <input class="form-control mb-3" name="password" type="password" placeholder="Password" required>
-  <button class="btn btn-primary w-100">{{ mode }}</button>
-</form>
-<div class="mt-3 small">{% if mode=='Login' %}New? <a href="/register">Register</a>{% else %}Have an account? <a href="/login">Login</a>{% endif %}</div>
-</div></div>{% endblock %}
+<div class="row justify-content-center align-items-center g-5 py-3">
+ <div class="col-lg-6 text-white d-none d-lg-block">
+  <h1 class="fw-bold display-5">Stop UPI fraud<br><span style="color:#fde68a">before it happens.</span></h1>
+  <p class="fs-5 opacity-75 mt-3">A Machine Learning engine analyses every transaction in real time and decides: approve, verify or block.</p>
+  <div class="d-flex flex-wrap gap-3 mt-4">
+   <div class="pill fs-6">🤖 Random Forest ML</div><div class="pill fs-6">⚡ Real-time risk score</div>
+   <div class="pill fs-6">🔐 Secure login</div><div class="pill fs-6">📊 Fraud analytics</div></div>
+ </div>
+ <div class="col-lg-5 col-md-8"><div class="gcard p-4">
+  <div class="text-center mb-3"><div style="font-size:3rem">{{ '🔑' if mode=='Login' else '✨' }}</div>
+   <h3 class="fw-bold mb-0">{{ 'Welcome back' if mode=='Login' else 'Create account' }}</h3>
+   <small class="text-muted">{{ 'Login to check your payments' if mode=='Login' else 'First account becomes the admin' }}</small></div>
+  <form method="post">
+   <label class="form-label">Username</label>
+   <input class="form-control mb-3" name="username" placeholder="e.g. admin" required>
+   <label class="form-label">Password</label>
+   <input class="form-control mb-4" name="password" type="password" placeholder="min 6 characters" required>
+   <button class="btn btn-grad w-100">{{ mode }} →</button>
+  </form>
+  <div class="text-center mt-3 small">
+   {% if mode=='Login' %}New here? <a href="/register" class="fw-semibold">Create an account</a>
+   {% else %}Already registered? <a href="/login" class="fw-semibold">Login</a>{% endif %}</div>
+ </div></div>
+</div>{% endblock %}
