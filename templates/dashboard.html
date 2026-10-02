@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block body %}
+<div class="row text-center mb-4">
+  <div class="col"><div class="card p-3"><h6>Total checked</h6><h3 id="total">0</h3></div></div>
+  <div class="col"><div class="card p-3"><h6>Money saved (blocked ₹)</h6><h3 id="saved">0</h3></div></div></div>
+<div class="row"><div class="col-md-5"><div class="card p-3"><canvas id="c1"></canvas></div></div>
+<div class="col-md-7"><div class="card p-3"><canvas id="c2"></canvas></div></div></div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+fetch("/api/stats").then(r=>r.json()).then(d=>{
+  total.textContent=d.total; saved.textContent=Math.round(d.saved).toLocaleString("en-IN");
+  new Chart(c1,{type:"doughnut",data:{labels:Object.keys(d.decisions),datasets:[{data:Object.values(d.decisions),backgroundColor:["#198754","#dc3545","#ffc107"]}]},options:{plugins:{title:{display:true,text:"Decisions"}}}});
+  new Chart(c2,{type:"bar",data:{labels:Object.keys(d.by_hour).map(h=>h+":00"),datasets:[{label:"Suspicious txns by hour",data:Object.values(d.by_hour),backgroundColor:"#dc3545"}]}});
+});
+</script>{% endblock %}
