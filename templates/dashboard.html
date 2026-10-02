@@ -1,14 +1,28 @@
 {% extends "base.html" %}{% block body %}
-<div class="row text-center mb-4">
-  <div class="col"><div class="card p-3"><h6>Total checked</h6><h3 id="total">0</h3></div></div>
-  <div class="col"><div class="card p-3"><h6>Money saved (blocked ₹)</h6><h3 id="saved">0</h3></div></div></div>
-<div class="row"><div class="col-md-5"><div class="card p-3"><canvas id="c1"></canvas></div></div>
-<div class="col-md-7"><div class="card p-3"><canvas id="c2"></canvas></div></div></div>
+<h3 class="text-white fw-bold mb-3">📊 Fraud Analytics Dashboard</h3>
+<div class="row g-3 mb-4">
+ <div class="col-md-4"><div class="gcard p-4 text-center" style="border-top:6px solid #6366f1">
+  <div style="font-size:2rem">🧾</div><div class="text-muted small">Transactions analysed</div><h2 class="fw-bold" id="total">0</h2></div></div>
+ <div class="col-md-4"><div class="gcard p-4 text-center" style="border-top:6px solid #ef4444">
+  <div style="font-size:2rem">🚫</div><div class="text-muted small">Fraud blocked</div><h2 class="fw-bold" id="blocked">0</h2></div></div>
+ <div class="col-md-4"><div class="gcard p-4 text-center" style="border-top:6px solid #10b981">
+  <div style="font-size:2rem">💰</div><div class="text-muted small">Money saved</div><h2 class="fw-bold" id="saved">₹0</h2></div></div>
+</div>
+<div class="row g-3">
+ <div class="col-lg-5"><div class="gcard p-4"><h6 class="fw-bold">Decision split</h6><canvas id="c1"></canvas></div></div>
+ <div class="col-lg-7"><div class="gcard p-4"><h6 class="fw-bold">Suspicious transactions by hour</h6><canvas id="c2"></canvas></div></div>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+const COL={"APPROVED":"#10b981","OTP RE-VERIFY":"#f59e0b","BLOCKED":"#ef4444"};
 fetch("/api/stats").then(r=>r.json()).then(d=>{
-  total.textContent=d.total; saved.textContent=Math.round(d.saved).toLocaleString("en-IN");
-  new Chart(c1,{type:"doughnut",data:{labels:Object.keys(d.decisions),datasets:[{data:Object.values(d.decisions),backgroundColor:["#198754","#dc3545","#ffc107"]}]},options:{plugins:{title:{display:true,text:"Decisions"}}}});
-  new Chart(c2,{type:"bar",data:{labels:Object.keys(d.by_hour).map(h=>h+":00"),datasets:[{label:"Suspicious txns by hour",data:Object.values(d.by_hour),backgroundColor:"#dc3545"}]}});
+ total.textContent=d.total; blocked.textContent=d.decisions["BLOCKED"]||0;
+ saved.textContent="₹"+Math.round(d.saved).toLocaleString("en-IN");
+ const k=Object.keys(d.decisions);
+ new Chart(c1,{type:"doughnut",data:{labels:k,datasets:[{data:k.map(x=>d.decisions[x]),backgroundColor:k.map(x=>COL[x]),borderWidth:3}]},
+  options:{cutout:"62%",plugins:{legend:{position:"bottom"}}}});
+ const h=Object.keys(d.by_hour);
+ new Chart(c2,{type:"bar",data:{labels:h.map(x=>x+":00"),datasets:[{label:"Suspicious / blocked",data:h.map(x=>d.by_hour[x]),
+  backgroundColor:"#8b5cf6",borderRadius:8}]},options:{scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
 });
 </script>{% endblock %}
