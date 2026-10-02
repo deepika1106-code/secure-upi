@@ -103,5 +103,68 @@ def stats():
     return jsonify(decisions={r["decision"]: r["n"] for r in c}, by_hour={r["hour"]: r["n"] for r in h},
                    total=t["n"], saved=t["saved"])
 
+# ---------- PWA (makes the website installable as a phone app) ----------
+import zlib, struct
+from functools import lru_cache
+from flask import Response
+
+@lru_cache(maxsize=4)
+def make_icon(s):
+    def seg(px, py, ax, ay, bx, by):
+        dx, dy = bx-ax, by-ay
+        t = max(0, min(1, ((px-ax)*dx + (py-ay)*dy) / (dx*dx + dy*dy)))
+        return ((px-ax-t*dx)**2 + (py-ay-t*dy)**2) ** 0.5
+    raw = bytearray()
+    for y in range(s):
+        raw.append(0)
+        v = y / s
+        for x in range(s):
+            u = x / s
+            k = (u + v) / 2
+            r, g, b = int(99 + (236-99)*k), int(102 + (72-102)*k), int(241 + (153-241)*k)
+            w = abs(u - 0.5)
+            if 0.24 <= v <= 0.52: shield = w <= 0.22
+            elif 0.52 < v <= 0.78: shield = w <= 0.22 * (1 - (v-0.52)/0.26) ** 0.6
+            else: shield = False
+            if shield:
+                r, g, b = 255, 255, 255
+                if min(seg(u, v, 0.40, 0.50, 0.47, 0.57), seg(u, v, 0.47, 0.57, 0.61, 0.40)) < 0.035:
+                    r, g, b = 99, 102, 241
+            raw += bytes((r, g, b))
+    def chunk(t, d):
+        c = struct.pack(">I", len(d)) + t + d
+        return c + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", s, s, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b""))
+
+@app.route("/icon-<int:size>.png")
+def icon(size):
+    size = size if size in (180, 192, 512) else 192
+    return Response(make_icon(size), mimetype="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+@app.route("/manifest.json")
+def manifest():
+    return jsonify(name="Secure UPI Fraud Shield", short_name="SecureUPI", description="ML-driven UPI fraud detection system",
+                   start_url="/", scope="/", display="standalone", orientation="portrait",
+                   background_color="#312e81", theme_color="#6d28d9",
+                   icons=[{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+                          {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}])
+
+SW_JS = """
+self.addEventListener('install', e => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', e => {
+  if (e.request.mode === 'navigate') {
+    e.respondWith(fetch(e.request).catch(() => new Response(
+      '<body style="font-family:sans-serif;text-align:center;padding:60px;background:#312e81;color:#fff">' +
+      '<h2>You are offline</h2><p>Secure UPI needs internet to check payments. Please reconnect.</p></body>',
+      {headers: {'Content-Type': 'text/html'}})));
+  }
+});
+"""
+
+@app.route("/sw.js")
+def service_worker():
+    return Response(SW_JS, mimetype="application/javascript", headers={"Cache-Control": "no-cache"})
 if __name__ == "__main__":
     app.run(debug=True)
