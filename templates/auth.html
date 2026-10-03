@@ -2,10 +2,10 @@
 <div class="row justify-content-center align-items-center g-5 py-3">
  <div class="col-lg-6 text-white d-none d-lg-block">
   <h1 class="fw-bold display-5">Stop UPI fraud<br><span style="color:#fde68a">before it happens.</span></h1>
-  <p class="fs-5 opacity-75 mt-3">A Machine Learning engine analyses every transaction in real time and decides: approve, verify or block.</p>
+  <p class="fs-5 opacity-75 mt-3">A Machine Learning engine analyses every payment in real time and decides: approve, verify or block.</p>
   <div class="d-flex flex-wrap gap-3 mt-4">
    <div class="pill fs-6">🤖 Random Forest ML</div><div class="pill fs-6">⚡ Real-time risk score</div>
-   <div class="pill fs-6">🔐 Secure login</div><div class="pill fs-6">📊 Fraud analytics</div></div>
+   <div class="pill fs-6">📷 QR scanner</div><div class="pill fs-6">📊 Fraud analytics</div></div>
  </div>
  <div class="col-lg-5 col-md-8"><div class="gcard p-4">
   <div class="text-center mb-3"><div style="font-size:3rem">{{ '🔑' if mode=='Login' else '✨' }}</div>
@@ -13,7 +13,7 @@
    <small class="text-muted">{{ 'Login to check your payments' if mode=='Login' else 'First account becomes the admin' }}</small></div>
   <form method="post">
    <label class="form-label">Username</label>
-   <input class="form-control mb-3" name="username" placeholder="e.g. admin" required>
+   <input class="form-control mb-3" name="username" placeholder="e.g. rahul" required>
    <label class="form-label">Password</label>
    <input class="form-control mb-4" name="password" type="password" placeholder="min 6 characters" required>
    <button class="btn btn-grad w-100">{{ mode }} →</button>
@@ -22,4 +22,16 @@
    {% if mode=='Login' %}New here? <a href="/register" class="fw-semibold">Create an account</a>
    {% else %}Already registered? <a href="/login" class="fw-semibold">Login</a>{% endif %}</div>
  </div></div>
-</div>{% endblock %}
+</div>
+<div class="row justify-content-center mt-2 mb-4"><div class="col-lg-10"><div class="gcard p-4">
+ <h5 class="fw-bold mb-3">📲 Get the Secure UPI app</h5>
+ <div class="row g-3">
+  <div class="col-md-6"><div class="p-3 rounded-4 h-100" style="background:#ecfdf5">
+   <b>🤖 Android</b>
+   <p class="small my-2">Download the app, open the file and tap Install. If asked, allow "Install unknown apps".</p>
+   <a class="btn btn-success rounded-pill px-4" href="https://github.com/deepika1106-code/secure-upi/releases/latest/download/SecureUPI.apk">⬇️ Download APK</a></div></div>
+  <div class="col-md-6"><div class="p-3 rounded-4 h-100" style="background:#eff6ff">
+   <b>🍎 iPhone / iPad</b>
+   <p class="small mb-0 mt-2">Open this website in <b>Safari</b>, tap the <b>Share</b> button, choose <b>Add to Home Screen</b>, then tap <b>Add</b>. The app icon appears on your home screen.</p></div></div>
+ </div></div></div></div>
+{% endblock %}
