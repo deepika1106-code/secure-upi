@@ -1,37 +1,38 @@
 {% extends "base.html" %}{% block body %}
 <div class="row g-4">
  <div class="col-lg-5"><div class="gcard p-4">
-  <h4 class="fw-bold mb-1">💳 New UPI Payment</h4>
-  <p class="text-muted small">Enter the details and let the AI judge the risk.</p>
-  <div class="d-flex flex-wrap gap-2 mb-3">
-   <span class="small fw-semibold align-self-center">Try an example:</span>
-   <button type="button" class="btn btn-sm btn-success rounded-pill" onclick="ex(500,14,2,0,0,0,0)">✅ Safe</button>
-   <button type="button" class="btn btn-sm btn-warning rounded-pill" onclick="ex(20000,23,80,2,1,0,1)">⚠️ Risky</button>
-   <button type="button" class="btn btn-sm btn-danger rounded-pill" onclick="ex(60000,2,300,4,1,1,1)">🚨 Fraud</button></div>
+  <h4 class="fw-bold mb-1">💳 Check before you pay</h4>
+  <p class="text-muted small mb-3">Enter who you are paying and the amount. Our AI checks the rest automatically.</p>
   <form method="post" id="f">
-   <label class="form-label">Receiver UPI ID</label>
-   <input class="form-control mb-2" name="upi_id" id="upi_id" placeholder="ravi@upi" required>
+   <label class="form-label">UPI ID or mobile number</label>
+   <div class="input-group mb-2">
+    <input class="form-control" name="receiver" id="rec" placeholder="name@bank or 9876543210" required autocomplete="off">
+    <button type="button" class="btn btn-grad px-3" onclick="startScan()">📷 Scan</button></div>
+   <div id="scanbox" style="display:none" class="mb-2">
+    <div id="reader" style="width:100%"></div>
+    <button type="button" class="btn btn-sm btn-outline-danger w-100 mt-1" onclick="stopScan()">Close scanner</button></div>
    <label class="form-label">Amount (₹)</label>
-   <input class="form-control mb-2" name="amount" id="amount" type="number" step="0.01" min="1" placeholder="500" required>
-   <div class="row g-2">
-    <div class="col-6"><label class="form-label">Hour of day (0-23)</label>
-     <input class="form-control mb-2" name="hour" id="hour" type="number" min="0" max="23" value="{{ now_hour }}" required></div>
-    <div class="col-6"><label class="form-label">Distance from usual (km)</label>
-     <input class="form-control mb-2" name="distance_km" id="distance_km" type="number" step="0.1" min="0" value="0" required></div></div>
-   <label class="form-label">Transactions in last hour</label>
-   <input class="form-control mb-3" name="txns_last_hour" id="txns_last_hour" type="number" min="0" value="0" required>
-   <div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" name="new_beneficiary" id="new_beneficiary">
-    <label class="form-check-label" for="new_beneficiary">🧑 New beneficiary</label></div>
-   <div class="form-check form-switch mb-4"><input class="form-check-input" type="checkbox" name="device_changed" id="device_changed">
-    <label class="form-check-label" for="device_changed">📱 New / unrecognised device</label></div>
-   <button class="btn btn-grad w-100">🔍 Analyse &amp; Pay</button>
-  </form></div></div>
+   <input class="form-control mb-3" name="amount" id="amt" type="number" step="0.01" min="1" placeholder="500" required>
+   <input type="hidden" name="lat" id="lat"><input type="hidden" name="lon" id="lon">
+   <input type="hidden" name="demo_hour" id="dh"><input type="hidden" name="demo_dist" id="dd">
+   <button class="btn btn-grad w-100">🔍 Check &amp; Pay</button>
+  </form>
+  <div class="d-flex flex-wrap gap-2 mt-3 small">
+   <span class="pill" style="background:#e0e7ff;color:#3730a3">🕒 {{ now }} IST</span>
+   <span class="pill" id="locchip" style="background:#e0e7ff;color:#3730a3">📍 Location: asking…</span></div>
+  <hr>
+  <div class="small fw-semibold mb-1">🧪 Demo scenarios (for review)</div>
+  <div class="d-flex flex-wrap gap-2">
+   <button type="button" class="btn btn-sm btn-success rounded-pill" onclick="ex('ravi.kumar@oksbi',500,'','')">✅ Safe</button>
+   <button type="button" class="btn btn-sm btn-warning rounded-pill" onclick="ex('offer.reward@okpay',12000,22,80)">⚠️ Risky</button>
+   <button type="button" class="btn btn-sm btn-danger rounded-pill" onclick="ex('refund.kyc99@paytm',45000,2,300)">🚨 Scam</button></div>
+ </div></div>
 
  <div class="col-lg-7">
   {% if result %}
   {% set col = '#10b981' if result.decision=='APPROVED' else '#f59e0b' if result.decision.startswith('OTP') else '#ef4444' %}
   {% set ic = '✅' if result.decision=='APPROVED' else '📲' if result.decision.startswith('OTP') else '🚫' %}
-  {% set msg = 'Payment looks genuine and has been approved.' if result.decision=='APPROVED' else 'Unusual activity. OTP re-verification required.' if result.decision.startswith('OTP') else 'High fraud risk. Transaction blocked to protect you.' %}
+  {% set msg = 'Looks safe. Payment approved.' if result.decision=='APPROVED' else 'Be careful. OTP re-verification required.' if result.decision.startswith('OTP') else 'High fraud risk. Payment blocked to protect you.' %}
   <div class="gcard p-4 mb-4" style="border-left:8px solid {{ col }}">
    <div class="d-flex align-items-center gap-4 flex-wrap">
     <svg width="130" height="130" viewBox="0 0 130 130">
@@ -43,22 +44,44 @@
     <div class="flex-grow-1">
      <h2 class="fw-bold mb-1" style="color:{{ col }}">{{ ic }} {{ result.decision }}</h2>
      <p class="mb-1">{{ msg }}</p>
-     <small class="text-muted">₹{{ result.amount }} → {{ result.upi_id }}</small></div></div></div>
+     <small class="text-muted">₹{{ result.amount }} → {{ result.receiver }}{% if result.sim %} · simulated demo scenario{% endif %}</small></div></div>
+   <hr><div class="fw-semibold small mb-2">🔎 Why we decided this</div>
+   {% for w in result.reasons %}<span class="badge rounded-pill me-1 mb-1 px-3 py-2" style="background:{{ col }}22;color:#1e1b4b;font-weight:500">{{ w }}</span>{% endfor %}
+  </div>
   <script>setTimeout(()=>{var r=document.getElementById('ring');r.style.transition='stroke-dashoffset 1.2s ease';
    r.style.strokeDashoffset=339.3*(1-{{ result.risk }}/100)},100)</script>
   {% endif %}
   <div class="gcard p-4">
-   <h5 class="fw-bold mb-3">🕒 Recent transactions</h5>
+   <h5 class="fw-bold mb-3">🕒 Recent checks</h5>
    {% if rows %}<div class="table-responsive"><table class="table table-hover align-middle mb-0">
-    <thead><tr class="small text-muted"><th>Time</th><th>To</th><th>Amount</th><th>Risk</th><th>Decision</th></tr></thead>
-    {% for r in rows %}<tr><td class="small">{{ r.created }}</td><td>{{ r.upi_id }}</td><td>₹{{ r.amount }}</td>
+    <thead><tr class="small text-muted"><th>Time</th><th>Receiver</th><th>Amount</th><th>Risk</th><th>Decision</th></tr></thead>
+    {% for r in rows %}<tr><td class="small">{{ r.created }}</td><td>{{ r.receiver }}</td><td>₹{{ r.amount }}</td>
      <td><div class="progress" style="height:8px;width:70px"><div class="progress-bar" style="width:{{ (r.risk*100)|round(0) }}%;background:{{ '#10b981' if r.decision=='APPROVED' else '#f59e0b' if r.decision.startswith('OTP') else '#ef4444' }}"></div></div>
       <small>{{ (r.risk*100)|round(1) }}%</small></td>
      <td><span class="badge-s {{ 's-ok' if r.decision=='APPROVED' else 's-otp' if r.decision.startswith('OTP') else 's-block' }}">{{ r.decision }}</span></td></tr>{% endfor %}
    </table></div>
-   {% else %}<div class="text-center text-muted py-4"><div style="font-size:2.5rem">🧾</div>No transactions yet. Try an example on the left!</div>{% endif %}
+   {% else %}<div class="text-center text-muted py-4"><div style="font-size:2.5rem">🧾</div>No checks yet. Try a demo scenario!</div>{% endif %}
   </div></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
-function ex(a,h,d,t,nb,dc,u){amount.value=a;hour.value=h;distance_km.value=d;txns_last_hour.value=t;
- new_beneficiary.checked=!!nb;device_changed.checked=!!dc;upi_id.value=upi_id.value||(u?'new@upi':'ravi@upi');}
+var sc=null, rec=document.getElementById('rec'), amt=document.getElementById('amt');
+function ex(r,a,h,d){rec.value=r;amt.value=a;document.getElementById('dh').value=h;document.getElementById('dd').value=d;}
+rec.addEventListener('input',()=>{document.getElementById('dh').value='';document.getElementById('dd').value='';});
+function startScan(){
+ document.getElementById('scanbox').style.display='block';
+ sc=new Html5Qrcode("reader");
+ sc.start({facingMode:"environment"},{fps:10,qrbox:220},function(t){
+  try{ if(t.indexOf("upi://")===0){var u=new URL(t),pa=u.searchParams.get("pa"),am=u.searchParams.get("am");
+        if(pa)rec.value=pa; if(am)amt.value=am;} else rec.value=t.trim(); }catch(e){rec.value=t.trim();}
+  stopScan();
+ }).catch(function(e){alert("Camera not available. Allow camera permission and use https.");stopScan();});
+}
+function stopScan(){ if(sc){sc.stop().then(function(){sc.clear();sc=null;}).catch(function(){});}
+ document.getElementById('scanbox').style.display='none'; }
+var chip=document.getElementById('locchip');
+if(navigator.geolocation){navigator.geolocation.getCurrentPosition(function(p){
+  document.getElementById('lat').value=p.coords.latitude;document.getElementById('lon').value=p.coords.longitude;
+  chip.textContent='📍 Location: on';},function(){chip.textContent='📍 Location: off';},{timeout:8000});}
+else{chip.textContent='📍 Location: unavailable';}
 </script>{% endblock %}
