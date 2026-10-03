@@ -1,12 +1,22 @@
-import sqlite3, joblib, pandas as pd
-from datetime import datetime
+import re, math, hashlib, sqlite3, joblib, pandas as pd
+from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, request, redirect, session, jsonify, g, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = "change-this-secret-in-production"
 model = joblib.load("model.pkl")
-FEATURES = ["amount", "hour", "new_beneficiary", "device_changed", "distance_km", "txns_last_hour"]
+FEATURES = ["amount", "hour", "receiver_new", "receiver_flags", "kw_hits", "digit_ratio",
+            "unknown_handle", "txns_last_hour", "amount_ratio", "device_changed", "distance_km"]
+IST = timezone(timedelta(hours=5, minutes=30))
+HANDLES = {"upi", "ybl", "ibl", "axl", "okaxis", "oksbi", "okhdfcbank", "okicici", "paytm", "apl", "sbi",
+           "hdfcbank", "icici", "axisbank", "pnb", "boi", "cnrb", "kotak", "idfcbank", "indus", "federal",
+           "yesbank", "postbank", "aubank", "rbl", "bandhan", "unionbank", "jio", "airtel", "freecharge", "slice"}
+KEYWORDS = ["refund", "kyc", "lottery", "reward", "cashback", "prize", "offer", "claim", "support", "helpdesk",
+            "care", "verify", "bonus", "gift", "winner", "loan", "urgent", "reversal", "customer"]
+VALID = re.compile(r"[6-9]\d{9}|[\w.\-]{2,64}@[a-z]{2,32}")
+
+def now_ist(): return datetime.now(IST)
 
 def db():
     if "db" not in g:
@@ -22,9 +32,8 @@ def init_db():
     c = sqlite3.connect("upi.db")
     c.executescript("""CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username TEXT UNIQUE,
         password TEXT, role TEXT);
-      CREATE TABLE IF NOT EXISTS txns(id INTEGER PRIMARY KEY, user_id INTEGER, upi_id TEXT, amount REAL,
-        hour INT, new_beneficiary INT, device_changed INT, distance_km REAL, txns_last_hour INT,
-        risk REAL, decision TEXT, created TEXT);""")
+      CREATE TABLE IF NOT EXISTS txns(id INTEGER PRIMARY KEY, user_id INTEGER, receiver TEXT, amount REAL,
+        hour INT, risk REAL, decision TEXT, created TEXT, device TEXT, lat REAL, lon REAL, reasons TEXT);""")
     c.commit(); c.close()
 init_db()
 
@@ -64,28 +73,78 @@ def logout():
     session.clear(); return redirect("/login")
 
 def decide(p):
-    return "APPROVED" if p < 0.30 else ("OTP RE-VERIFY" if p < 0.70 else "BLOCKED")
+    return "APPROVED" if p < 0.25 else ("OTP RE-VERIFY" if p < 0.55 else "BLOCKED")
+
+def analyze_id(rcv):
+    local, _, handle = rcv.partition("@")
+    phone = bool(re.fullmatch(r"[6-9]\d{9}", local))
+    kw = min(sum(k in local for k in KEYWORDS), 3)
+    dr = 0.0 if phone else round(sum(ch.isdigit() for ch in local) / max(len(local), 1), 2)
+    unk = int(bool(handle) and handle not in HANDLES)
+    return kw, dr, unk
+
+def km(a, b, c, d):
+    p = math.pi / 180
+    x = math.sin((c-a)*p/2)**2 + math.cos(a*p)*math.cos(c*p)*math.sin((d-b)*p/2)**2
+    return 12742 * math.asin(math.sqrt(x))
+
+def num(v):
+    try: return float(v)
+    except (TypeError, ValueError): return None
 
 @app.route("/", methods=["GET", "POST"])
 @login_required
 def index():
     result = None
     if request.method == "POST":
-        f = request.form
-        row = dict(amount=float(f["amount"]), hour=int(f["hour"]), new_beneficiary=int("new_beneficiary" in f),
-                   device_changed=int("device_changed" in f), distance_km=float(f["distance_km"]),
-                   txns_last_hour=int(f["txns_last_hour"]))
-        p = float(model.predict_proba(pd.DataFrame([row])[FEATURES])[0][1])
-        d = decide(p)
-        db().execute("INSERT INTO txns(user_id,upi_id,amount,hour,new_beneficiary,device_changed,distance_km,"
-                     "txns_last_hour,risk,decision,created) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                     (session["uid"], f["upi_id"], row["amount"], row["hour"], row["new_beneficiary"],
-                      row["device_changed"], row["distance_km"], row["txns_last_hour"], p, d,
-                      datetime.now().strftime("%Y-%m-%d %H:%M")))
-        db().commit(); result = dict(risk=round(p*100, 1), decision=d, upi_id=f["upi_id"], amount=row["amount"])
+        f, uid, d = request.form, session["uid"], db()
+        rcv = f["receiver"].strip().lower().replace(" ", "")
+        amount = num(f["amount"])
+        if not VALID.fullmatch(rcv) or not amount or amount <= 0:
+            flash("Enter a valid UPI ID (name@bank) or 10-digit mobile number, and an amount")
+        else:
+            kw, dr, unk = analyze_id(rcv)
+            hour = int(num(f.get("demo_hour")) if f.get("demo_hour") else now_ist().hour)
+            seen = d.execute("SELECT COUNT(*) FROM txns WHERE user_id=? AND receiver=? AND decision='APPROVED'", (uid, rcv)).fetchone()[0]
+            flags = min(d.execute("SELECT COUNT(*) FROM txns WHERE receiver=? AND decision='BLOCKED'", (rcv,)).fetchone()[0], 5)
+            avg = d.execute("SELECT AVG(amount) FROM txns WHERE user_id=? AND decision='APPROVED'", (uid,)).fetchone()[0]
+            ratio = min(amount / avg, 10) if avg else 1.0
+            cutoff = (now_ist() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M")
+            tlh = d.execute("SELECT COUNT(*) FROM txns WHERE user_id=? AND created>=?", (uid, cutoff)).fetchone()[0]
+            dev = hashlib.md5(request.user_agent.string.encode()).hexdigest()[:10]
+            last = d.execute("SELECT device FROM txns WHERE user_id=? ORDER BY id DESC LIMIT 1", (uid,)).fetchone()
+            changed = int(bool(last) and last["device"] != dev)
+            lat, lon = num(f.get("lat")), num(f.get("lon"))
+            prev = d.execute("SELECT lat, lon FROM txns WHERE user_id=? AND lat IS NOT NULL ORDER BY id DESC LIMIT 1", (uid,)).fetchone()
+            dist = km(prev["lat"], prev["lon"], lat, lon) if (prev and lat is not None) else 0.0
+            if f.get("demo_dist"): dist = float(f["demo_dist"])
+            row = dict(amount=amount, hour=hour, receiver_new=int(seen == 0), receiver_flags=flags, kw_hits=kw,
+                       digit_ratio=dr, unknown_handle=unk, txns_last_hour=tlh, amount_ratio=round(ratio, 2),
+                       device_changed=changed, distance_km=round(dist, 1))
+            p = float(model.predict_proba(pd.DataFrame([row])[FEATURES])[0][1])
+            dec = decide(p)
+            why = []
+            if hour < 5: why.append("Late-night payment (%d:00)" % hour)
+            if kw: why.append("ID contains scam-style words")
+            if flags: why.append("This receiver was blocked %d time(s) before" % flags)
+            if seen == 0: why.append("First payment to this receiver")
+            if unk: why.append("Unrecognised bank handle")
+            if dr > 0.3: why.append("ID is mostly random digits")
+            if ratio > 3: why.append("Amount is %dx your usual" % ratio)
+            if amount >= 25000: why.append("High amount")
+            if tlh >= 3: why.append("%d payments in the last hour" % tlh)
+            if changed: why.append("Payment from a new device")
+            if dist > 100: why.append("Location %d km from your usual area" % dist)
+            if not why: why = ["No risk signals found"]
+            d.execute("INSERT INTO txns(user_id,receiver,amount,hour,risk,decision,created,device,lat,lon,reasons) "
+                      "VALUES(?,?,?,?,?,?,?,?,?,?,?)", (uid, rcv, amount, hour, p, dec,
+                      now_ist().strftime("%Y-%m-%d %H:%M"), dev, lat, lon, " | ".join(why)))
+            d.commit()
+            result = dict(risk=round(p*100, 1), decision=dec, receiver=rcv, amount=amount, reasons=why,
+                          sim=bool(f.get("demo_hour") or f.get("demo_dist")))
     q = "SELECT * FROM txns" + ("" if session["role"] == "admin" else " WHERE user_id=%d" % session["uid"])
     rows = db().execute(q + " ORDER BY id DESC LIMIT 10").fetchall()
-    return render_template("index.html", result=result, rows=rows, now_hour=datetime.now().hour)
+    return render_template("index.html", result=result, rows=rows, now=now_ist().strftime("%I:%M %p"))
 
 @app.route("/dashboard")
 @login_required
@@ -166,5 +225,6 @@ self.addEventListener('fetch', e => {
 @app.route("/sw.js")
 def service_worker():
     return Response(SW_JS, mimetype="application/javascript", headers={"Cache-Control": "no-cache"})
+
 if __name__ == "__main__":
     app.run(debug=True)
